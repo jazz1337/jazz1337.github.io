@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JAZZ.EXE — System Online</title>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green: #00ff41;
+      --green-dim: #00aa2a;
+      --green-glow: rgba(0,255,65,0.15);
+      --bg: #0a0a0a;
+      --bg2: #0d0d0d;
+      --amber: #ffb000;
+      --red: #ff3c3c;
+      --cyan: #00e5ff;
+      --white: #e8ffe8;
+      --border: #1a3a1a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Desktop only cursor */
+    @media (hover: hover) {
+      body { cursor: none; }
+      #cursor {
+        width: 18px; height: 18px;
+        border: 2px solid var(--green);
+        border-radius: 50%;
+        position: fixed;
+        pointer-events: none;
+        z-index: 9999;
+        transform: translate(-50%,-50%);
+        transition: transform 0.08s, background 0.1s;
+        mix-blend-mode: screen;
+      }
+      #cursor.click { background: var(--green); transform: translate(-50%,-50%) scale(1.5); }
+    }
+    @media (hover: none) { #cursor { display: none; } }
+
+    /* ── SCANLINES ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 4px);
+      pointer-events: none;
+      z-index: 9000;
+      animation: flicker 8s infinite;
+    }
+    @keyframes flicker {
+      0%,100%{opacity:1} 92%{opacity:1} 93%{opacity:0.85} 94%{opacity:1} 96%{opacity:0.9} 97%{opacity:1}
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.75) 100%);
+      pointer-events: none;
+      z-index: 8999;
+    }
+
+    /* ── BOOT SCREEN ── */
+    #boot {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      z-index: 8000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      transition: opacity 0.8s;
+    }
+    #boot.hidden { opacity: 0; pointer-events: none; }
+    .boot-lines { max-width: 680px; width: 100%; overflow: hidden; }
+    .boot-line {
+      opacity: 0;
+      animation: fadeIn 0.01s forwards;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: clamp(11px, 2.5vw, 14px);
+    }
+    .boot-line.ok::after  { content: ' [OK]';   color: var(--green); }
+    .boot-line.err::after { content: ' [ERR]';  color: var(--red); }
+    .boot-line.warn::after{ content: ' [WARN]'; color: var(--amber); }
+    @keyframes fadeIn { to { opacity: 1; } }
+    #progress-bar  { width: 100%; height: 3px; background: var(--border); margin: 16px 0; max-width: 680px; }
+    #progress-fill { height: 100%; background: var(--green); width: 0%; transition: width 0.1s; box-shadow: 0 0 10px var(--green); }
+
+    /* ── APP ── */
+    #app { display: none; }
+    #app.visible { display: block; }
+
+    /* ── TOPBAR ── */
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 40px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      z-index: 7000;
+      font-family: 'VT323', monospace;
+      font-size: 17px;
+      gap: 8px;
+    }
+    #topbar .nav-links { display: flex; gap: 14px; flex-wrap: nowrap; overflow-x: auto; }
+    #topbar .nav-links::-webkit-scrollbar { display: none; }
+    #topbar .nav-links span {
+      opacity: 0.6; cursor: pointer;
+      transition: opacity 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    #topbar .nav-links span:hover { opacity: 1; color: var(--amber); }
+    #topbar .clock { color: var(--green-dim); font-size: 15px; white-space: nowrap; flex-shrink: 0; }
+
+    /* ── MAIN ── */
+    #main {
+      margin-top: 40px;
+      padding: 16px;
+      max-width: 1100px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ── TERMINAL WINDOW ── */
+    .terminal-window {
+      border: 1px solid var(--border);
+      background: rgba(0,255,65,0.02);
+      margin-bottom: 18px;
+      position: relative;
+      box-shadow: 0 0 30px rgba(0,255,65,0.04), inset 0 0 30px rgba(0,0,0,0.4);
+    }
+    .terminal-window::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(0,255,65,0.02) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    .win-titlebar {
+      background: var(--border);
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid rgba(0,255,65,0.1);
+      overflow: hidden;
+    }
+    .win-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .win-dot.red   { background: var(--red); }
+    .win-dot.amber { background: var(--amber); }
+    .win-dot.green { background: var(--green); }
+    .win-title {
+      font-family: 'VT323', monospace; font-size: 15px; opacity: 0.7;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .win-body { padding: 16px; }
+
+    /* ── ASCII HERO ── */
+    .ascii-hero {
+      font-family: 'VT323', monospace;
+      font-size: clamp(7px, 1.7vw, 19px);
+      line-height: 1.1;
+      color: var(--green);
+      text-shadow: 0 0 8px var(--green);
+      white-space: pre;
+      overflow-x: auto;
+      margin-bottom: 16px;
+      cursor: pointer;
+    }
+    .ascii-hero::-webkit-scrollbar { height: 2px; }
+    .ascii-hero::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .typing-line {
+      display: flex; align-items: flex-start; gap: 8px; margin: 5px 0;
+      flex-wrap: wrap;
+    }
+    .prompt { color: var(--green-dim); user-select: none; white-space: nowrap; flex-shrink: 0; }
+    .typing-text { color: var(--white); word-break: break-word; }
+    .typing-text.cursor-blink::after {
+      content: '█'; animation: blink 1s infinite; color: var(--green);
+    }
+    @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+
+    /* ── SECTION HEADER ── */
+    .section-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px;
+      font-family: 'VT323', monospace; font-size: 20px;
+    }
+    .section-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .section-header .num { color: var(--green-dim); font-size: 13px; }
+
+    /* ── STATS GRID ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 14px;
+    }
+    @media (max-width: 600px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 380px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+
+    .stat-box {
+      border: 1px solid var(--border);
+      padding: 10px;
+      transition: border-color 0.3s, box-shadow 0.3s;
+      cursor: default;
+    }
+    .stat-box:hover { border-color: var(--green-dim); box-shadow: 0 0 12px var(--green-glow); }
+    .stat-label { color: var(--green-dim); font-size: 10px; margin-bottom: 4px; }
+    .stat-value { font-family: 'VT323', monospace; font-size: 24px; color: var(--green); }
+    .stat-sub { font-size: 10px; color: var(--green-dim); margin-top: 3px; }
+    .stat-bar { height: 3px; background: var(--border); margin-top: 6px; }
+    .stat-fill { height: 100%; background: var(--green); box-shadow: 0 0 6px var(--green); transition: width 1.5s ease; }
+
+    /* ── ABOUT TEXT ── */
+    .about-text {
+      color: var(--white); font-size: 13px; line-height: 1.8;
+      border-left: 2px solid var(--green-dim); padding-left: 12px;
+      margin-top: 14px;
+    }
+    @media (max-width: 480px) { .about-text { font-size: 12px; } }
+
+    /* ── TAGS ── */
+    .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+    .tag { font-size: 10px; padding: 2px 7px; border: 1px solid; }
+    .tag.green { border-color: var(--green); color: var(--green); }
+    .tag.amber { border-color: var(--amber); color: var(--amber); }
+    .tag.cyan  { border-color: var(--cyan);  color: var(--cyan); }
+    .tag.red   { border-color: var(--red);   color: var(--red); }
+
+    /* ── SKILL TREE ── */
+    .skill-tree { display: flex; flex-direction: column; gap: 9px; }
+    .skill-row  { display: flex; align-items: center; gap: 10px; }
+    .skill-name { min-width: 140px; color: var(--white); font-size: 12px; flex-shrink: 0; }
+    @media (max-width: 480px) { .skill-name { min-width: 110px; font-size: 11px; } }
+    .skill-bar-bg { flex: 1; height: 11px; background: var(--border); overflow: hidden; }
+    .skill-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green-dim), var(--green));
+      box-shadow: 0 0 6px var(--green);
+      width: 0%; transition: width 1.5s ease;
+      position: relative;
+    }
+    .skill-bar-fill::after {
+      content: ''; position: absolute; right: 0; top: 0; bottom: 0;
+      width: 3px; background: white; opacity: 0.7;
+    }
+    .skill-pct { min-width: 36px; text-align: right; color: var(--green-dim); font-size: 11px; }
+
+    /* ── PROJECTS GRID ── */
+    .projects-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    @media (max-width: 560px) { .projects-grid { grid-template-columns: 1fr; } }
+
+    .project-card {
+      border: 1px solid var(--border);
+      padding: 14px;
+      position: relative; overflow: hidden;
+      transition: all 0.3s; cursor: pointer;
+    }
+    .project-card::before {
+      content: ''; position: absolute; top: -100%; left: 0; right: 0; height: 100%;
+      background: linear-gradient(180deg, transparent, var(--green-glow));
+      transition: top 0.4s;
+    }
+    .project-card:hover { border-color: var(--green); box-shadow: 0 0 18px var(--green-glow); }
+    .project-card:hover::before { top: 0; }
+    .p-tag  { color: var(--green-dim); font-size: 10px; margin-bottom: 5px; }
+    .p-name { font-family: 'VT323', monospace; font-size: 20px; color: var(--amber); margin-bottom: 6px; }
+    .p-desc { color: var(--white); font-size: 12px; line-height: 1.5; opacity: 0.85; }
+    .p-tech { margin-top: 10px; display: flex; gap: 5px; flex-wrap: wrap; }
+    .tech-badge { border: 1px solid var(--green-dim); padding: 2px 6px; font-size: 10px; color: var(--green-dim); }
+
+    /* ── TERMINAL INPUT ── */
+    #terminal-output {
+      min-height: 160px; max-height: 300px;
+      overflow-y: auto; margin-bottom: 10px; font-size: 12px;
+    }
+    #terminal-output::-webkit-scrollbar { width: 3px; }
+    #terminal-output::-webkit-scrollbar-thumb { background: var(--border); }
+    .t-line { margin: 2px 0; word-break: break-word; }
+    .t-line.input   { color: var(--green-dim); }
+    .t-line.output  { color: var(--white); }
+    .t-line.error   { color: var(--red); }
+    .t-line.success { color: var(--green); }
+    .t-line.info    { color: var(--cyan); }
+    .t-line.amber   { color: var(--amber); }
+
+    #input-row {
+      display: flex; align-items: center; gap: 8px;
+      border-top: 1px solid var(--border); padding-top: 10px;
+    }
+    #terminal-input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--green);
+      font-family: 'Share Tech Mono', monospace; font-size: 13px;
+      caret-color: transparent;
+      min-width: 0;
+    }
+    #fake-caret { animation: blink 1s infinite; color: var(--green); flex-shrink: 0; }
+
+    /* ── MATRIX CANVAS ── */
+    #matrix-canvas {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: -1; opacity: 0.04; pointer-events: none;
+    }
+
+    /* ── FOOTER ── */
+    #footer {
+      border-top: 1px solid var(--border);
+      padding: 18px 16px; text-align: center;
+      color: var(--green-dim); font-size: 11px; margin-top: 30px;
+    }
+    #footer .f-title { font-family: 'VT323', monospace; font-size: 16px; margin-bottom: 6px; }
+
+    /* ── EASTER EGG MODAL ── */
+    #egg-modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 8500; justify-content: center; align-items: center;
+      padding: 16px;
+    }
+    #egg-modal.show { display: flex; }
+    #egg-inner {
+      border: 2px solid var(--amber); background: var(--bg);
+      padding: 28px 24px; max-width: 460px; width: 100%;
+      text-align: center;
+      box-shadow: 0 0 50px rgba(255,176,0,0.25);
+    }
+    #egg-inner h2 { font-family: 'VT323', monospace; font-size: 30px; color: var(--amber); margin-bottom: 12px; }
+    #egg-inner p  { color: var(--white); font-size: 12px; line-height: 1.8; }
+    #egg-close {
+      margin-top: 18px; border: 1px solid var(--amber); background: transparent;
+      color: var(--amber); padding: 7px 20px;
+      font-family: 'Share Tech Mono', monospace; cursor: pointer; transition: all 0.2s;
+    }
+    #egg-close:hover { background: var(--amber); color: var(--bg); }
+
+    /* ── SECRET OVERLAY ── */
+    #secret-overlay {
+      display: none; position: fixed; inset: 0; background: var(--bg);
+      z-index: 9500; justify-content: center; align-items: center;
+      flex-direction: column; font-family: 'VT323', monospace;
+      text-align: center; padding: 20px;
+    }
+    #secret-overlay.show { display: flex; }
+    #secret-overlay h1 {
+      font-size: clamp(40px, 12vw, 80px);
+      color: var(--amber); text-shadow: 0 0 40px var(--amber);
+    }
+    #secret-overlay p { color: var(--green); font-size: clamp(14px, 3.5vw, 20px); margin-top: 14px; }
+    #secret-overlay button {
+      margin-top: 24px; border: 1px solid var(--green); background: transparent;
+      color: var(--green); font-family: 'VT323', monospace; font-size: 18px;
+      padding: 8px 28px; cursor: pointer;
+    }
+
+    /* ── CHAT POPUP ── */
+    #chat-popup {
+      position: fixed;
+      top: 52px; right: 14px;
+      width: clamp(220px, 75vw, 290px);
+      z-index: 8800;
+      display: flex; flex-direction: column; gap: 9px;
+      pointer-events: none;
+    }
+    .chat-bubble {
+      background: var(--bg2); border: 1px solid var(--green);
+      padding: 12px 14px;
+      box-shadow: 0 0 18px var(--green-glow);
+      opacity: 0; transform: translateX(40px);
+      transition: opacity 0.4s, transform 0.4s;
+      pointer-events: all;
+    }
+    .chat-bubble.show { opacity: 1; transform: translateX(0); }
+    .cb-from { font-family: 'VT323', monospace; font-size: 14px; color: var(--amber); margin-bottom: 5px; }
+    .cb-text { color: var(--white); font-size: 12px; line-height: 1.5; }
+    .cb-btns { display: flex; gap: 7px; margin-top: 10px; }
+    .chat-btn {
+      border: 1px solid var(--green); background: transparent; color: var(--green);
+      font-family: 'Share Tech Mono', monospace; font-size: 11px;
+      padding: 4px 12px; cursor: pointer; transition: all 0.2s;
+    }
+    .chat-btn:hover { background: var(--green); color: var(--bg); }
+
+    /* ── TUTORIAL ── */
+    #tut-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65); z-index: 8600; pointer-events: none;
+    }
+    #tut-backdrop.show { display: block; }
+    .tut-highlight {
+      position: fixed; border: 2px solid var(--amber);
+      box-shadow: 0 0 0 4000px rgba(0,0,0,0.65), 0 0 18px var(--amber);
+      z-index: 8700; pointer-events: none;
+      transition: all 0.35s; border-radius: 2px; display: none;
+    }
+    #tut-popup {
+      position: fixed; background: var(--bg); border: 1px solid var(--amber);
+      padding: 16px 18px; width: clamp(220px, 80vw, 270px);
+      z-index: 8800; box-shadow: 0 0 24px rgba(255,176,0,0.18); display: none;
+    }
+    #tut-popup.show { display: block; }
+    .tut-step  { color: var(--green-dim); font-size: 10px; margin-bottom: 5px; }
+    .tut-title { font-family: 'VT323', monospace; font-size: 20px; color: var(--amber); margin-bottom: 6px; }
+    .tut-text  { color: var(--white); font-size: 11px; line-height: 1.7; }
+    .tut-btns  { display: flex; gap: 7px; margin-top: 12px; }
+    .tut-btn {
+      border: 1px solid var(--green); background: transparent; color: var(--green);
+      font-family: 'Share Tech Mono', monospace; font-size: 10px;
+      padding: 4px 10px; cursor: pointer; transition: all 0.2s;
+    }
+    .tut-btn:hover { background: var(--green); color: var(--bg); }
+    .tut-btn.skip { border-color: var(--green-dim); color: var(--green-dim); }
+    .tut-btn.skip:hover { background: var(--green-dim); color: var(--bg); }
+
+    /* ── GLITCH ── */
+    .glitch { position: relative; display: inline-block; }
+    .glitch::before, .glitch::after {
+      content: attr(data-text); position: absolute; left: 0; top: 0;
+    }
+    .glitch::before {
+      color: var(--cyan); animation: glitch1 4s infinite;
+      clip-path: polygon(0 0,100% 0,100% 35%,0 35%); opacity: 0.7;
+    }
+    .glitch::after {
+      color: var(--red); animation: glitch2 4s infinite;
+      clip-path: polygon(0 65%,100% 65%,100% 100%,0 100%); opacity: 0.7;
+    }
+    @keyframes glitch1 { 0%,94%,100%{transform:none} 95%{transform:translateX(-2px)} 97%{transform:translateX(2px)} }
+    @keyframes glitch2 { 0%,94%,100%{transform:none} 95%{transform:translateX(2px)} 97%{transform:translateX(-2px)} }
+
+    /* ── MOBILE TERMINAL HINT ── */
+    @media (max-width: 480px) {
+      .mobile-term-hint {
+        font-size: 10px; color: var(--green-dim); margin-bottom: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<canvas id="matrix-canvas"></canvas>
+
+<!-- BOOT -->
+<div id="boot">
+  <div class="boot-lines" id="boot-lines"></div>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+</div>
+
+<!-- EASTER EGG -->
+<div id="egg-modal">
+  <div id="egg-inner">
+    <h2>⚠ EASTER EGG ⚠</h2>
+    <p id="egg-text"></p>
+    <button id="egg-close" onclick="document.getElementById('egg-modal').classList.remove('show')">[ CLOSE ]</button>
+  </div>
+</div>
+
+<!-- SECRET OVERLAY -->
+<div id="secret-overlay">
+  <h1>🎰 JACKPOT 🎰</h1>
+  <p>&gt; Du hast das geheime Jazz-Protokoll aktiviert.<br>
+     &gt; Sehr aufmerksam. Respekt.<br>
+     &gt; House always wins — außer heute.</p>
+  <button onclick="document.getElementById('secret-overlay').classList.remove('show')">[ EXIT ]</button>
+</div>
+
+<!-- CHAT POPUP -->
+<div id="chat-popup">
+  <div class="chat-bubble" id="chat-1">
+    <div class="cb-from">💬 JAZZ_BOT.exe</div>
+    <div class="cb-text">Hallo mein akh 👋</div>
+  </div>
+  <div class="chat-bubble" id="chat-2">
+    <div class="cb-from">💬 JAZZ_BOT.exe</div>
+    <div class="cb-text">Hast du dich verlaufen mein Röchelbraten? 🗺️</div>
+    <div class="cb-btns">
+      <button class="chat-btn" onclick="chatStep2()">Ja</button>
+      <button class="chat-btn" onclick="chatStep2()">Ja</button>
+    </div>
+  </div>
+  <div class="chat-bubble" id="chat-3">
+    <div class="cb-from">💬 JAZZ_BOT.exe</div>
+    <div class="cb-text">Mies... Brauchst du ein Tutorial? 💀</div>
+    <div class="cb-btns">
+      <button class="chat-btn" onclick="startTutorial()">Ja</button>
+      <button class="chat-btn" onclick="startTutorial()">Ja</button>
+    </div>
+  </div>
+</div>
+
+<!-- TUTORIAL -->
+<div id="tut-backdrop"></div>
+<div class="tut-highlight" id="tut-highlight"></div>
+<div id="tut-popup">
+  <div class="tut-step"  id="tut-step-lbl">SCHRITT 1 / 5</div>
+  <div class="tut-title" id="tut-title">TOPBAR</div>
+  <div class="tut-text"  id="tut-text">Text here</div>
+  <div class="tut-btns">
+    <button class="tut-btn" id="tut-next" onclick="tutNext()">WEITER →</button>
+    <button class="tut-btn skip" onclick="endTutorial()">SKIP</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="topbar">
+    <div class="nav-links">
+      <span onclick="scrollTo('about')">ABOUT</span>
+      <span onclick="scrollTo('skills')">SKILLS</span>
+      <span onclick="scrollTo('projects')">PROJEKTE</span>
+      <span onclick="scrollTo('terminal')">TERMINAL</span>
+    </div>
+    <div class="clock" id="clock">00:00:00</div>
+  </div>
+
+  <div id="main">
+
+    <!-- HERO -->
+    <div class="terminal-window" style="margin-top:12px">
+      <div class="win-titlebar">
+        <div class="win-dot red"></div><div class="win-dot amber"></div><div class="win-dot green"></div>
+        <span class="win-title">jazz@system:~$ ./intro.sh</span>
+      </div>
+      <div class="win-body">
+        <div class="ascii-hero" id="ascii-logo"></div>
+        <div id="hero-lines"></div>
+      </div>
+    </div>
+
+    <!-- ABOUT -->
+    <div id="about" class="terminal-window">
+      <div class="win-titlebar">
+        <div class="win-dot red"></div><div class="win-dot amber"></div><div class="win-dot green"></div>
+        <span class="win-title">system_stats.exe — jazz@portfolio</span>
+      </div>
+      <div class="win-body">
+        <div class="section-header"><span class="num">01.</span> SYSTEM INFO</div>
+        <div class="stats-grid">
+          <div class="stat-box" id="click-stat" onclick="handleStatClick()" style="cursor:pointer">
+            <div class="stat-label">// NAME</div>
+            <div class="stat-value">JAZZ</div>
+            <div class="stat-sub">alias: root_user</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">// STATUS</div>
+            <div class="stat-value">ONLINE</div>
+            <div class="stat-bar"><div class="stat-fill" style="width:100%"></div></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">// MOOD.exe</div>
+            <div class="stat-value" id="mood-val">LOADING</div>
+            <div class="stat-bar"><div class="stat-fill" id="mood-bar" style="width:0%"></div></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">// KAFFEE_LVL</div>
+            <div class="stat-value">9000</div>
+            <div class="stat-bar"><div class="stat-fill" style="width:90%"></div></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">// WIN_RATE</div>
+            <div class="stat-value" id="winrate-val">--</div>
+            <div class="stat-sub" style="color:var(--amber)" id="winrate-sub">calculating...</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">// BUGS_FIXED</div>
+            <div class="stat-value">∞-1</div>
+            <div class="stat-sub" style="color:var(--red)">new_bugs: ∞</div>
+          </div>
+        </div>
+
+        <div class="about-text">
+          &gt; Ich bin <span style="color:var(--amber)">Jazz</span> — Builder, Ecommercer, KI-Nerd und professioneller Glücksspieler.<br>
+          &gt; Ich baue Sachen mit KI, verkaufe Sachen im Internet und automatisiere alles was nicht schnell genug wegläuft.<br>
+          &gt; Wenn es einen Workflow gibt der manuell läuft, ist das ein persönlicher Angriff auf mich.<br>
+          &gt; <span style="color:var(--green-dim);font-size:10px">// kein Workflow wurde beim Erstellen dieser Seite manuell ausgeführt</span>
+        </div>
+        <div class="tag-row">
+          <span class="tag green">BUILDER</span>
+          <span class="tag amber">ECOMMERCER</span>
+          <span class="tag cyan">KI_NERD</span>
+          <span class="tag green">AUTOMATION_GUY</span>
+          <span class="tag red">PROFI_GAMBLER</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SKILLS -->
+    <div id="skills" class="terminal-window">
+      <div class="win-titlebar">
+        <div class="win-dot red"></div><div class="win-dot amber"></div><div class="win-dot green"></div>
+        <span class="win-title">skill_tree.dat — READ ONLY</span>
+      </div>
+      <div class="win-body">
+        <div class="section-header"><span class="num">02.</span> SKILL TREE</div>
+        <div class="skill-tree" id="skill-tree"></div>
+        <br/>
+        <div style="color:var(--green-dim);font-size:10px">
+          // Tippe <span style="color:var(--green)">'skills'</span> im Terminal für mehr Details.
+        </div>
+      </div>
+    </div>
+
+    <!-- PROJECTS -->
+    <div id="projects" class="terminal-window">
+      <div class="win-titlebar">
+        <div class="win-dot red"></div><div class="win-dot amber"></div><div class="win-dot green"></div>
+        <span class="win-title">ls -la ./projekte/</span>
+      </div>
+      <div class="win-body">
+        <div class="section-header"><span class="num">03.</span> PROJEKTE</div>
+        <div class="projects-grid" id="projects-grid"></div>
+      </div>
+    </div>
+
+    <!-- TERMINAL -->
+    <div id="terminal" class="terminal-window">
+      <div class="win-titlebar">
+        <div class="win-dot red"></div><div class="win-dot amber"></div><div class="win-dot green"></div>
+        <span class="win-title">bash — jazz@portfolio:~</span>
+      </div>
+      <div class="win-body">
+        <div class="section-header"><span class="num">04.</span> LIVE TERMINAL</div>
+        <div class="mobile-term-hint" style="display:none" id="mobile-hint">
+          // Auf dem Handy: Tippe in das Feld unten und drücke Enter
+        </div>
+        <div id="terminal-output"></div>
+        <div id="input-row">
+          <span class="prompt">jazz@portfolio:~$</span>
+          <input type="text" id="terminal-input" autocomplete="off" spellcheck="false"
+                 placeholder="help..." inputmode="text" enterkeyhint="send" />
+          <span id="fake-caret">█</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <div id="footer">
+    <div class="f-title">JAZZ.EXE — v1.0.0 — ALL RIGHTS RESERVED © <span id="year"></span></div>
+    <div>made with <span style="color:var(--red)">♥</span> &amp; ☕ &amp; 🎰</div>
+    <div style="font-size:9px;color:var(--border);margin-top:4px" id="secret-hint"></div>
+  </div>
+</div><!-- /app -->
+
+<script>
+/* ═══════════════════════ MATRIX ═══════════════════════ */
+const canvas = document.getElementById('matrix-canvas');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<>{}[]アイウエオカキ';
+let drops = [];
+function initDrops() {
+  const cols = Math.floor(canvas.width / 18);
+  drops = Array(cols).fill(1);
+}
+initDrops();
+window.addEventListener('resize', initDrops);
+function drawMatrix() {
+  ctx.fillStyle = 'rgba(10,10,10,0.05)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#00ff41';
+  ctx.font = '14px Share Tech Mono';
+  drops.forEach((y, i) => {
+    ctx.fillText(chars[Math.floor(Math.random()*chars.length)], i*18, y*18);
+    if (y*18 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  });
+}
+setInterval(drawMatrix, 60);
+
+/* ═══════════════════════ CURSOR ═══════════════════════ */
+const cur = document.getElementById('cursor');
+document.addEventListener('mousemove', e => {
+  cur.style.left = e.clientX + 'px';
+  cur.style.top  = e.clientY + 'px';
+});
+document.addEventListener('mousedown', () => cur.classList.add('click'));
+document.addEventListener('mouseup',   () => cur.classList.remove('click'));
+
+/* ═══════════════════════ CLOCK ═══════════════════════ */
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    [n.getHours(), n.getMinutes(), n.getSeconds()].map(x => String(x).padStart(2,'0')).join(':');
+}
+setInterval(updateClock, 1000);
+updateClock();
+document.getElementById('year').textContent = new Date().getFullYear();
+
+/* ═══════════════════════ BOOT ═══════════════════════ */
+const bootMsgs = [
+  { text: 'JAZZ_OS v1.0.0 — Booting...', delay: 0 },
+  { text: 'Lade KI-Modul... GPT wäre neidisch', delay: 160, s:'ok' },
+  { text: 'Starte Ecommerce-Engine... Shopify connected', delay: 300, s:'ok' },
+  { text: 'Initialisiere N8N-Workflows... 847 aktiv', delay: 450, s:'ok' },
+  { text: 'Prüfe Kaffee-Vorrat... KRITISCH', delay: 600, s:'warn' },
+  { text: 'Lade Glückspiel-Modul... House Edge: 1.2%', delay: 750, s:'warn' },
+  { text: 'Verbinde mit der echten Welt... Timeout', delay: 900, s:'err' },
+  { text: 'Fallback: localhost:3000', delay: 1000, s:'ok' },
+  { text: 'Scanne für manuelle Prozesse... 0 gefunden. Perfekt.', delay: 1150, s:'ok' },
+  { text: 'Starte Easter Egg System...', delay: 1300, s:'ok' },
+  { text: 'Render Portfolio UI...', delay: 1450, s:'ok' },
+  { text: 'ALLE SYSTEME NOMINAL', delay: 1600 },
+];
+const bootContainer = document.getElementById('boot-lines');
+const progressFill  = document.getElementById('progress-fill');
+bootMsgs.forEach((m, i) => {
+  setTimeout(() => {
+    const d = document.createElement('div');
+    d.className = 'boot-line' + (m.s ? ' '+m.s : '');
+    d.textContent = `[${String(i).padStart(2,'0')}] ${m.text}`;
+    bootContainer.appendChild(d);
+    progressFill.style.width = ((i+1)/bootMsgs.length*100)+'%';
+    bootContainer.scrollTop = bootContainer.scrollHeight;
+  }, m.delay);
+});
+setTimeout(() => {
+  document.getElementById('boot').classList.add('hidden');
+  document.getElementById('app').classList.add('visible');
+  initSite();
+}, 2300);
+
+/* ═══════════════════════ INIT ═══════════════════════ */
+function initSite() {
+  renderAscii();
+  renderHeroLines();
+  renderSkills();
+  renderProjects();
+  initTerminal();
+  animateStats();
+  initChatPopup();
+  // mobile hint
+  if (window.innerWidth <= 480) {
+    document.getElementById('mobile-hint').style.display = 'block';
+  }
+  document.getElementById('secret-hint').textContent =
+    '// hint: "sudo jazz" im Terminal eingeben';
+}
+
+/* ═══════════════════════ ASCII ═══════════════════════ */
+function renderAscii() {
+  const logo = `
+     ██╗ █████╗ ███████╗███████╗
+     ██║██╔══██╗╚══███╔╝╚══███╔╝
+     ██║███████║  ███╔╝   ███╔╝ 
+██   ██║██╔══██║ ███╔╝   ███╔╝  
+╚█████╔╝██║  ██║███████╗███████╗
+ ╚════╝ ╚═╝  ╚═╝╚══════╝╚══════╝`.trim();
+  const el = document.getElementById('ascii-logo');
+  el.textContent = logo;
+  let clicks = 0;
+  el.addEventListener('click', () => {
+    if (++clicks >= 3) { clicks = 0; document.getElementById('secret-overlay').classList.add('show'); }
+  });
+}
+
+/* ═══════════════════════ HERO LINES ═══════════════════════ */
+function renderHeroLines() {
+  const lines = [
+    { p:'jazz@system:~$', t:'whoami', delay:200 },
+    { p:'>', t:'Builder. Ecommercer. KI-Nerd. Professioneller Zufalls-Optimierer.', delay:600, c:'var(--white)' },
+    { p:'jazz@system:~$', t:'echo $MOTTO', delay:1100 },
+    { p:'>', t:'Wenn ich es automatisieren kann, mach ich es. Wenn nicht, lasse ich eine KI es versuchen.', delay:1500, c:'var(--white)' },
+    { p:'jazz@system:~$', t:'_', delay:2100, cursor:true },
+  ];
+  const c = document.getElementById('hero-lines');
+  lines.forEach(l => {
+    setTimeout(() => {
+      const row = document.createElement('div');
+      row.className = 'typing-line';
+      row.innerHTML = `
+        <span class="prompt">${l.p}</span>
+        <span class="typing-text${l.cursor?' cursor-blink':''}" style="color:${l.c||'var(--green)'}">
+          ${l.t}
+        </span>`;
+      c.appendChild(row);
+    }, l.delay);
+  });
+}
+
+/* ═══════════════════════ SKILLS ═══════════════════════ */
+const skillData = [
+  { name: 'KI & Prompting',        pct: 93 },
+  { name: 'Ecommerce / Dropship',  pct: 88 },
+  { name: 'Shopsysteme (Shopify)', pct: 85 },
+  { name: 'Automations (N8N etc)', pct: 82 },
+  { name: 'Ads & Performance',     pct: 78 },
+  { name: 'Professionell Zocken',  pct: 91 },
+  { name: 'Kaffee Konsumieren',    pct: 99 },
+  { name: 'Manuell Arbeiten',      pct:  4 },
+];
+function renderSkills() {
+  const c = document.getElementById('skill-tree');
+  skillData.forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'skill-row';
+    row.innerHTML = `
+      <span class="skill-name">&gt; ${s.name}</span>
+      <div class="skill-bar-bg">
+        <div class="skill-bar-fill" data-pct="${s.pct}" style="width:0%"></div>
+      </div>
+      <span class="skill-pct">${s.pct}%</span>`;
+    c.appendChild(row);
+  });
+  setTimeout(() => {
+    document.querySelectorAll('.skill-bar-fill').forEach(el => {
+      el.style.width = el.dataset.pct + '%';
+    });
+  }, 300);
+}
+
+/* ═══════════════════════ PROJECTS ═══════════════════════ */
+const projectData = [
+  {
+    tag:'// ECOMMERCE',
+    name:'SHOP.EXE',
+    desc:'Onlineshop aufgebaut. Läuft. Macht Umsatz. Die Conversion Rate ist besser als mein Schlafrythmus.',
+    techs:['Shopify','Liquid','Hoffnung'],
+  },
+  {
+    tag:'// AUTOMATION',
+    name:'N8N_EMPIRE',
+    desc:'Workflows die Workflows bauen. Irgendwann automatisiere ich mich selbst weg. Dann hab ich endlich Urlaub.',
+    techs:['N8N','Make','Zapier','Kaffee'],
+  },
+  {
+    tag:'// KI PROJEKT',
+    name:'AI_AGENT_47',
+    desc:'KI-Agent der Produktbeschreibungen schreibt, Ads testet und sich beschwert wenn der ROAS schlecht ist.',
+    techs:['GPT-4','Claude','Automation'],
+  },
+  {
+    tag:'// IN PROGRESS',
+    name:'NEXT_LEVEL.exe',
+    desc:'Das nächste große Ding. Noch in der Planungsphase. Oder ich scrolle gerade durch Aliexpress. Beides möglich.',
+    techs:['???','Vision','Monster Energy'],
+  },
+];
+function renderProjects() {
+  const g = document.getElementById('projects-grid');
+  projectData.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'project-card';
+    card.innerHTML = `
+      <div class="p-tag">${p.tag}</div>
+      <div class="p-name">${p.name}</div>
+      <div class="p-desc">${p.desc}</div>
+      <div class="p-tech">${p.techs.map(t=>`<span class="tech-badge">${t}</span>`).join('')}</div>`;
+    g.appendChild(card);
+  });
+}
+
+/* ═══════════════════════ STATS ANIMATION ═══════════════════════ */
+function animateStats() {
+  const moods = ['AUTOMATING','CASHFLOW_POSITIVE','GAMBLING','BUILDING','CAFFEINATED','BUSY_DOING_NOTHING'];
+  const moodEl = document.getElementById('mood-val');
+  const moodBar = document.getElementById('mood-bar');
+  let mi = 0;
+  moodEl.textContent = moods[0]; moodBar.style.width = '80%';
+  setInterval(() => {
+    mi = (mi+1)%moods.length;
+    moodEl.textContent = moods[mi];
+    moodBar.style.width = (55+Math.random()*40)+'%';
+  }, 2800);
+
+  // "win rate" joke counter
+  const wr = document.getElementById('winrate-val');
+  const ws = document.getElementById('winrate-sub');
+  let val = 0;
+  const t = setInterval(() => {
+    val += Math.floor(Math.random()*9)+1;
+    if (val >= 67) { val = 67; clearInterval(t); ws.textContent='(wir zählen nur die Gewinne)'; }
+    wr.textContent = val+'%';
+  }, 60);
+}
+
+/* ═══════════════════════ STAT CLICK EASTER EGG ═══════════════════════ */
+let statClicks = 0;
+function handleStatClick() {
+  if (++statClicks >= 3) {
+    statClicks = 0;
+    showEgg('Du hast JAZZ 3x geklickt.<br><br>' +
+      '&gt; Glückwunsch, du hast mehr Ausdauer als mein letzter Shopify-Store.<br>' +
+      '&gt; Beides ist okay.<br><br>' +
+      '<span style="color:var(--green)">// Achievement: TRIPLE_CLICK_ENJOYER</span>');
+  }
+}
+function showEgg(text) {
+  document.getElementById('egg-text').innerHTML = text;
+  document.getElementById('egg-modal').classList.add('show');
+}
+
+/* ═══════════════════════ CHAT POPUP ═══════════════════════ */
+function initChatPopup() {
+  setTimeout(() => document.getElementById('chat-1').classList.add('show'), 900);
+  setTimeout(() => document.getElementById('chat-2').classList.add('show'), 2000);
+}
+function chatStep2() {
+  document.getElementById('chat-2').querySelector('.cb-btns').style.display = 'none';
+  setTimeout(() => document.getElementById('chat-3').classList.add('show'), 400);
+}
+
+/* ═══════════════════════ TUTORIAL ═══════════════════════ */
+const tutSteps = [
+  { id:'topbar',   title:'DIE NAVIGATION',   pos:'bottom', text:'Hier navigierst du. ABOUT = wer ist Jazz. SKILLS = was kann er. PROJEKTE = was hat er gebaut. TERMINAL = wo du Sachen eintippen kannst. Die Uhr zeigt wie viel deiner Lebenszeit du hier verbringst.' },
+  { id:'about',    title:'SYSTEM INFO',      pos:'bottom', text:'Hier steht wer ich bin. Builder, Ecommercer, KI-Nerd und — ja — professioneller Glücksspieler. Die Stats rechnen sich neu durch.' },
+  { id:'skills',   title:'SKILL TREE',       pos:'bottom', text:'Meine Skills als Ladebalken. KI ganz oben. "Manuell Arbeiten" ganz unten. Das ist kein Zufall.' },
+  { id:'projects', title:'PROJEKTE',         pos:'bottom', text:'Was ich gebaut habe. Hover über eine Card für den Glow-Effekt. Mobile: tippen.' },
+  { id:'terminal', title:'DAS TERMINAL',     pos:'top',    text:'Ein echtes Terminal. Tippe "help" für Commands. Es gibt versteckte Commands. Find sie. Viel Spaß. 👀' },
+];
+let tutIdx = 0;
+function startTutorial() {
+  document.getElementById('chat-popup').style.display = 'none';
+  tutIdx = 0; showTutStep();
+}
+function showTutStep() {
+  if (tutIdx >= tutSteps.length) { endTutorial(); return; }
+  const s = tutSteps[tutIdx];
+  const target = document.getElementById(s.id);
+  if (!target) { tutIdx++; showTutStep(); return; }
+  target.scrollIntoView({ behavior:'smooth', block:'center' });
+  setTimeout(() => {
+    const rect = target.getBoundingClientRect();
+    const hl = document.getElementById('tut-highlight');
+    const pop = document.getElementById('tut-popup');
+    hl.style.cssText = `display:block;top:${rect.top-4}px;left:${rect.left-4}px;width:${rect.width+8}px;height:${rect.height+8}px`;
+    document.getElementById('tut-backdrop').classList.add('show');
+    pop.classList.add('show');
+    let pt = s.pos === 'bottom' ? rect.bottom + 12 : rect.top - 190;
+    let pl = rect.left;
+    pl = Math.max(8, Math.min(pl, window.innerWidth - 285));
+    pt = Math.max(48, Math.min(pt, window.innerHeight - 195));
+    pop.style.top = pt+'px'; pop.style.left = pl+'px';
+    document.getElementById('tut-step-lbl').textContent = `SCHRITT ${tutIdx+1} / ${tutSteps.length}`;
+    document.getElementById('tut-title').textContent = s.title;
+    document.getElementById('tut-text').textContent  = s.text;
+    document.getElementById('tut-next').textContent  = tutIdx === tutSteps.length-1 ? 'FERTIG ✓' : 'WEITER →';
+  }, 450);
+}
+function tutNext() { tutIdx++; showTutStep(); }
+function endTutorial() {
+  document.getElementById('tut-backdrop').classList.remove('show');
+  document.getElementById('tut-popup').classList.remove('show');
+  document.getElementById('tut-highlight').style.display = 'none';
+  document.getElementById('chat-popup').style.display = 'none';
+}
+
+/* ═══════════════════════ TERMINAL ═══════════════════════ */
+const output = document.getElementById('terminal-output');
+const input  = document.getElementById('terminal-input');
+let cmdHistory = [], histIdx = -1;
+
+const commands = {
+  help: () => [
+    { t:'info',    v:'╔══════════════════════════════════════╗' },
+    { t:'info',    v:'║    JAZZ TERMINAL — HELP v1.0         ║' },
+    { t:'info',    v:'╚══════════════════════════════════════╝' },
+    { t:'success', v:'help        — diese Hilfe' },
+    { t:'success', v:'whoami      — wer ist Jazz?' },
+    { t:'success', v:'skills      — Skill-Übersicht' },
+    { t:'success', v:'joke        — Witze (random)' },
+    { t:'success', v:'quote       — Zitat' },
+    { t:'success', v:'time        — aktuelle Uhrzeit' },
+    { t:'success', v:'ping        — pong' },
+    { t:'success', v:'clear       — Terminal leeren' },
+    { t:'amber',   v:'// Es gibt versteckte Commands.' },
+  ],
+  whoami: () => [
+    { t:'output',  v:'NAME      : Jazz' },
+    { t:'output',  v:'ROLLE     : Builder / Ecommercer / KI-Nerd / Gambler' },
+    { t:'output',  v:'LOCATION  : [REDACTED]' },
+    { t:'output',  v:'MISSION   : Alles automatisieren, nichts manuell machen' },
+    { t:'output',  v:'WEAKNESS  : Kaffee, schlechte ROAS, undefined errors' },
+    { t:'success', v:'// Mehr Infos: classified.' },
+  ],
+  skills: () => skillData.map(s => ({
+    t:'output',
+    v:`${s.name.padEnd(24)} [${'█'.repeat(Math.floor(s.pct/10))}${'░'.repeat(10-Math.floor(s.pct/10))}] ${s.pct}%`
+  })),
+  ping:  () => [{ t:'success', v:'PONG 🏓 — latency: 0ms (localhost)' }],
+  clear: () => { output.innerHTML = ''; return []; },
+  time:  () => [{ t:'info', v:`UHRZEIT: ${new Date().toLocaleTimeString('de-DE')} — Stop procrastinating.` }],
+  joke:  () => {
+    const jokes = [
+      'Wie nennt man einen KI-Agenten ohne Prompt? Arbeitslos.',
+      'N8N-Workflow bricht ab um 3 Uhr nachts.\nIch: "Das ist jetzt das Universum der es testet."',
+      'Mein Shopify-Store macht Umsatz.\nMein Konto nicht. Sehr mysteriös.',
+      'Ich habe Roulette optimiert.\nEs heißt jetzt "Geld verbrennen mit Stil".',
+      '404 — Joke not found. Das war der Joke.',
+      'KI sagt: "Ich erledige das für dich."\nIch: "Perfekt, ich geh Zocken."',
+    ];
+    return jokes[Math.floor(Math.random()*jokes.length)].split('\n').map(v=>({t:'amber',v}));
+  },
+  quote: () => {
+    const quotes = [
+      '"Automate everything." — Jazz, täglich',
+      '"Der beste Workflow ist der, den man nie wieder anfassen muss." — N8N Bibel',
+      '"ROAS ist eine Einstellung." — Kein einziger Experte jemals',
+      '"Work smarter, not harder. Dann gar nicht." — Jazz',
+      '"Im Internet kauft niemand.\nAußer sie tun es." — Ecommerce Wahrheit',
+    ];
+    return quotes[Math.floor(Math.random()*quotes.length)].split('\n').map(v=>({t:'info',v:`> ${v}`}));
+  },
+  // HIDDEN
+  'sudo jazz': () => {
+    setTimeout(() => document.getElementById('secret-overlay').classList.add('show'), 400);
+    return [{ t:'success', v:'🔓 JAZZ MODE — Erhöhte Rechte gewährt. Jackpot!' }];
+  },
+  matrix: () => {
+    showEgg('Du hast "matrix" eingegeben.<br><br>' +
+      '&gt; Sehr aufmerksam.<br>' +
+      '&gt; Die Matrix läuft. Im Hintergrund. Schau hin.<br><br>' +
+      '<span style="color:var(--green)">// Achievement: NEO_MODE</span>');
+    return [{ t:'success', v:'> There is no spoon. Oder ROAS.' }];
+  },
+  hack: () => {
+    [
+      { t:'success', v:'Initiiere Hack-Sequenz...' },
+      { t:'output',  v:'Greife auf Mainframe zu...' },
+      { t:'output',  v:'Umgehe Firewall...' },
+      { t:'output',  v:'Lade das Internet herunter...' },
+      { t:'amber',   v:'████████████████████ 100%' },
+      { t:'error',   v:'FEHLER: Du bist nicht Jazz.' },
+    ].forEach((l,i) => setTimeout(()=>addLine(l.t,l.v), i*400));
+    return [];
+  },
+  yolo: () => [
+    { t:'amber',   v:'YOLO.exe wird ausgeführt...' },
+    { t:'output',  v:'All-in auf Black.' },
+    { t:'success', v:'Ergebnis: Red.' },
+    { t:'error',   v:'Skill issue.' },
+  ],
+  exit: () => [{ t:'error', v:'Netter Versuch. Du kommst hier nicht raus. 😈' }],
+  ls: () => [
+    { t:'output',  v:'drwxr-xr-x  jazz/  skills/  projekte/  secrets/' },
+    { t:'output',  v:'-rw-r--r--  README.md  workflows.n8n  casino.sh' },
+    { t:'amber',   v:'// secrets/ ist read-only. Natürlich.' },
+  ],
+  coffee: () => [
+    { t:'success', v:'☕ Brewing... Done.' },
+    { t:'output',  v:'CAFFEINE_LEVEL += 9000' },
+    { t:'success', v:'Bereit für weitere 6h N8N-Debugging.' },
+  ],
+  roas: () => [
+    { t:'info',    v:'ROAS-KALKULATOR v1.0' },
+    { t:'output',  v:'Ausgaben: hoch' },
+    { t:'output',  v:'Einnahmen: "es läuft"' },
+    { t:'amber',   v:'Status: Profitable (mental accounting aktiviert)' },
+  ],
+  'cat README.md': () => [
+    { t:'info',    v:'# JAZZ.EXE' },
+    { t:'output',  v:'Ein Builder der Dinge baut.' },
+    { t:'output',  v:'Ein Ecommercer der Dinge verkauft.' },
+    { t:'output',  v:'Ein KI-Guy der Dinge automatisiert.' },
+    { t:'output',  v:'Ein Gambler der das Haus schlägt. Manchmal.' },
+  ],
+};
+
+function addLine(type, text) {
+  const d = document.createElement('div');
+  d.className = `t-line ${type}`;
+  d.textContent = text;
+  output.appendChild(d);
+  output.scrollTop = output.scrollHeight;
+}
+
+function runCommand(val) {
+  const cmd = commands[val.toLowerCase()];
+  if (cmd) {
+    const r = cmd();
+    if (r && r.length) r.forEach(x => addLine(x.t, x.v));
+  } else {
+    addLine('error', `command not found: ${val}`);
+    addLine('amber', '// Tippe "help" für Commands.');
+  }
+}
+
+function initTerminal() {
+  addLine('info',    '╔══════════════════════════════════════════╗');
+  addLine('info',    '║  JAZZ TERMINAL — Ready                    ║');
+  addLine('info',    '╚══════════════════════════════════════════╝');
+  addLine('output',  'Tippe "help" um loszulegen. Oder explore einfach.');
+  addLine('success', '// Tipp: Es gibt versteckte Commands.');
+
+  // Desktop: Enter key
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const val = input.value.trim();
+      if (!val) return;
+      cmdHistory.unshift(val); histIdx = -1;
+      addLine('input', `jazz@portfolio:~$ ${val}`);
+      input.value = '';
+      runCommand(val);
+    }
+    if (e.key === 'ArrowUp')   { histIdx = Math.min(histIdx+1, cmdHistory.length-1); input.value = cmdHistory[histIdx]||''; }
+    if (e.key === 'ArrowDown') { histIdx = Math.max(histIdx-1, -1); input.value = histIdx===-1?'':cmdHistory[histIdx]; }
+  });
+
+  // Mobile: enterkeyhint="send" triggers this on virtual keyboards too
+  input.addEventListener('keyup', e => {
+    if (e.key === 'Enter' || e.keyCode === 13) {
+      const val = input.value.trim();
+      if (!val) return;
+      cmdHistory.unshift(val); histIdx = -1;
+      addLine('input', `jazz@portfolio:~$ ${val}`);
+      input.value = '';
+      runCommand(val);
+    }
+  });
+}
+
+/* ═══════════════════════ SCROLL ═══════════════════════ */
+function scrollTo(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+</script>
+</body>
+</html>
